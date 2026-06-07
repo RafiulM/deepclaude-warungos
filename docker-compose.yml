@@ -1,0 +1,23 @@
+services:
+  web:
+    build:
+      context: .
+      args:
+        # NEXT_PUBLIC_* must be set at build time (inlined into the client bundle).
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-}
+    ports:
+      - "3000:3000"
+    # Runtime env vars. Create .env from .env.example. APP_PASSWORD etc. are
+    # read by the server at request time.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: file:/app/data/warungos.db
+    # Persist the SQLite DB across container restarts/rebuilds.
+    volumes:
+      - warungos-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  warungos-data:
