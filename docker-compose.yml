@@ -14,6 +14,9 @@ services:
         required: false
     environment:
       DATABASE_URL: file:/app/data/warungos.db
+      # REQUIRED in production. Set in .env (better-auth throws if unset).
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
     # Persist the SQLite DB across container restarts/rebuilds.
     volumes:
       - warungos-data:/app/data

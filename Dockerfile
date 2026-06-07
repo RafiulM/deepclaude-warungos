@@ -28,6 +28,13 @@ COPY . .
 # Telemetry off in CI/build.
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# The db module is evaluated during `next build` (page-data collection), which
+# opens the SQLite file. Point it at a throwaway, always-writable path so the
+# build never depends on the final DB location or on who runs the build.
+# No secret is needed at build time — better-auth's secret is only read per
+# request — so secrets are intentionally NOT passed as build args.
+ENV DATABASE_URL=file:/tmp/build.db
+
 # Build-time public env vars (NEXT_PUBLIC_*) are inlined into the client bundle
 # during `next build`, so they must be passed as build args. Add more as needed.
 ARG NEXT_PUBLIC_APP_URL
@@ -62,10 +69,14 @@ VOLUME /app/data
 
 USER nextjs
 
-# Runtime env vars. Override at `docker run` with -e / --env-file (these are
-# read by the server at request time, not baked into the image).
-#   DATABASE_URL  path to the SQLite file (file: prefix is stripped by the app)
-#   APP_PASSWORD  login password for the app
+# Runtime env vars. Pass secrets at `docker run` with -e / --env-file (read by
+# the server at request time, NOT baked into the image — never use build ARGs
+# for these):
+#   BETTER_AUTH_SECRET  REQUIRED in production; better-auth throws without it.
+#                       Generate with: openssl rand -base64 32
+#   BETTER_AUTH_URL     public base URL of the app, e.g. https://warung.example
+#   APP_PASSWORD        login password for the app
+# Only the non-sensitive defaults below are baked in.
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV DATABASE_URL=file:/app/data/warungos.db
