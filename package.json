@@ -6,10 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:push": "drizzle-kit push",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:setup": "npm run db:push && npm run db:seed",
+    "postinstall": "node -e \"var f='node_modules/kysely/dist/index.js';var fs=require('fs');if(!fs.readFileSync(f,'utf8').includes('DEFAULT_MIGRATION_TABLE')){fs.appendFileSync(f,'export const DEFAULT_MIGRATION_TABLE=\\\"migrations\\\";export const DEFAULT_MIGRATION_LOCK_TABLE=\\\"migrations_lock\\\";\\n')}\""
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@better-auth/drizzle-adapter": "^1.6.14",
     "@libsql/client": "^0.17.3",
     "better-auth": "^1.6.14",
     "better-sqlite3": "^12.10.0",

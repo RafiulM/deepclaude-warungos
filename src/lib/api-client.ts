@@ -1,5 +1,5 @@
 import { User, Product, Sale, Expense, CartItem, PaymentMethod, DailySummary, ExpenseFormItem, ApiResponse } from "./types";
-import { signIn, signOut, getSession } from "./auth-client";
+import { signIn, signOut } from "./auth-client";
 
 const BASE = "";
 
@@ -21,24 +21,26 @@ async function request<T>(url: string, options?: RequestInit): Promise<ApiRespon
 
 // ====== AUTH ======
 export async function login(email: string, password: string): Promise<ApiResponse<User>> {
-  const result = await signIn(email, password);
-  if (!result.success) {
-    return { success: false, data: null as unknown as User, message: result.message };
+  const result = await signIn.email({
+    email,
+    password,
+  });
+  if (result.error) {
+    return { success: false, data: null as unknown as User, message: result.error.message || "Login gagal" };
   }
-  return { success: true, data: result.data as User };
+  return {
+    success: true,
+    data: {
+      id: result.data?.user?.id || "",
+      name: result.data?.user?.name || "",
+      role: (result.data?.user as any)?.role || "penjaga",
+    },
+  };
 }
 
 export async function logout(): Promise<ApiResponse<null>> {
   await signOut();
   return { success: true, data: null };
-}
-
-export async function fetchSession(): Promise<ApiResponse<User | null>> {
-  const user = await getSession();
-  if (user) {
-    return { success: true, data: user as User };
-  }
-  return { success: false, data: null };
 }
 
 // ====== PRODUCTS ======

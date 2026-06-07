@@ -4,14 +4,18 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 import { LogOut, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { logout } from "@/lib/api-client";
+import { signOut } from "@/lib/auth-client";
+import { toast } from "sonner";
 
 export function AppHeader() {
   const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
   const router = useRouter();
 
   const handleLogout = async () => {
-    await logout();
+    await signOut();
+    logout();
+    toast.success("Berhasil keluar");
     router.push("/login");
   };
 

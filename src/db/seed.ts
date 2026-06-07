@@ -1,94 +1,143 @@
 import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import * as schema from "./schema";
+import { hashPassword } from "better-auth/crypto";
+
 const sqlite = new Database("warungos.db");
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
-const db = drizzle(sqlite, { schema });
 
 async function seed() {
   console.log("🌱 Seeding database...");
 
-  // ====== USERS ======
+  // ====== CREATE BETTER AUTH TABLES ======
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS user (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      emailVerified INTEGER DEFAULT 0 NOT NULL,
+      image TEXT,
+      role TEXT DEFAULT 'penjaga' NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS session (
+      id TEXT PRIMARY KEY NOT NULL,
+      expiresAt INTEGER NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      ipAddress TEXT,
+      userAgent TEXT,
+      userId TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS account (
+      id TEXT PRIMARY KEY NOT NULL,
+      accountId TEXT NOT NULL,
+      providerId TEXT NOT NULL,
+      userId TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+      accessToken TEXT,
+      refreshToken TEXT,
+      idToken TEXT,
+      accessTokenExpiresAt INTEGER,
+      refreshTokenExpiresAt INTEGER,
+      scope TEXT,
+      password TEXT,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS verification (
+      id TEXT PRIMARY KEY NOT NULL,
+      identifier TEXT NOT NULL,
+      value TEXT NOT NULL,
+      expiresAt INTEGER NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    );
+  `);
+  console.log("  ✓ Auth tables created");
+
+  // ====== USERS (Better Auth compatible) ======
   const users = [
-    { id: "u1", name: "Pak Budi", role: "pemilik" as const, email: "budi@warungos.local" },
-    { id: "u2", name: "Mbak Siti", role: "penjaga" as const, email: "siti@warungos.local" },
-    { id: "u3", name: "Mas Anto", role: "penjaga" as const, email: "anto@warungos.local" },
+    { id: "u1", name: "Pak Budi", role: "pemilik", email: "budi@warungos.local" },
+    { id: "u2", name: "Mbak Siti", role: "penjaga", email: "siti@warungos.local" },
+    { id: "u3", name: "Mas Anto", role: "penjaga", email: "anto@warungos.local" },
   ];
+
+  const hashedPassword = await hashPassword("warung123");
+
+  const now = Date.now();
 
   for (const u of users) {
-    db.insert(schema.users)
-      .values({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        role: u.role,
-        emailVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .onConflictDoNothing()
-      .run();
+    // Insert user
+    sqlite.prepare(`
+      INSERT OR IGNORE INTO user (id, name, email, emailVerified, role, createdAt, updatedAt)
+      VALUES (?, ?, ?, 1, ?, ?, ?)
+    `).run(u.id, u.name, u.email, u.role, now, now);
+
+    // Insert account with hashed password
+    sqlite.prepare(`
+      INSERT OR IGNORE INTO account (id, accountId, providerId, userId, password, createdAt, updatedAt)
+      VALUES (?, ?, 'credential', ?, ?, ?, ?)
+    `).run(`acc_${u.id}`, u.email, u.id, hashedPassword, now, now);
   }
-  console.log("  ✓ Users seeded");
+  console.log("  ✓ Users seeded (3 with passwords: warung123)");
 
   // ====== PRODUCTS ======
-  const products = [
-    { id: "p01", name: "Indomie Goreng", currentStock: 40, minStock: 10, salePrice: 3500, purchasePrice: 2800, category: "makanan", unit: "pcs" },
-    { id: "p02", name: "Indomie Kuah Ayam Bawang", currentStock: 5, minStock: 10, salePrice: 3500, purchasePrice: 2800, category: "makanan", unit: "pcs" },
-    { id: "p03", name: "Telur Ayam 1kg", currentStock: 8, minStock: 5, salePrice: 28000, purchasePrice: 25000, category: "sembako", unit: "kg" },
-    { id: "p04", name: "Beras 5kg", currentStock: 3, minStock: 2, salePrice: 65000, purchasePrice: 58000, category: "sembako", unit: "pack" },
-    { id: "p05", name: "Kopi Sachet", currentStock: 100, minStock: 20, salePrice: 2000, purchasePrice: 1500, category: "minuman", unit: "sachet" },
-    { id: "p06", name: "Teh Botol", currentStock: 15, minStock: 10, salePrice: 5000, purchasePrice: 3800, category: "minuman", unit: "botol" },
-    { id: "p07", name: "Gula Pasir 1kg", currentStock: 5, minStock: 3, salePrice: 16000, purchasePrice: 14000, category: "sembako", unit: "kg" },
-    { id: "p08", name: "Minyak Goreng 1L", currentStock: 4, minStock: 3, salePrice: 18000, purchasePrice: 16000, category: "sembako", unit: "liter" },
-    { id: "p09", name: "Air Mineral 600ml", currentStock: 24, minStock: 12, salePrice: 3000, purchasePrice: 2200, category: "minuman", unit: "botol" },
-    { id: "p10", name: "Sabun Mandi Lifebuoy", currentStock: 6, minStock: 5, salePrice: 4500, purchasePrice: 3500, category: "lainnya", unit: "pcs" },
-    { id: "p11", name: "Rokok Kretek Djisamsoe", currentStock: 2, minStock: 5, salePrice: 25000, purchasePrice: 22000, category: "rokok", unit: "bungkus"},
-    { id: "p12", name: "Rokok Filter Sampoerna", currentStock: 10, minStock: 5, salePrice: 30000, purchasePrice: 27000, category: "rokok", unit: "bungkus"},
-    { id: "p13", name: "Kecap Manis Bango", currentStock: 12, minStock: 5, salePrice: 8000, purchasePrice: 6000, category: "sembako", unit: "pcs" },
-    { id: "p14", name: "Saus Sambal ABC", currentStock: 0, minStock: 5, salePrice: 7000, purchasePrice: 5500, category: "sembako", unit: "pcs" },
-    { id: "p15", name: "Mie Sedap Goreng", currentStock: 35, minStock: 10, salePrice: 3500, purchasePrice: 2800, category: "makanan", unit: "pcs" },
-    { id: "p16", name: "Tepung Terigu 1kg", currentStock: 4, minStock: 3, salePrice: 12000, purchasePrice: 10000, category: "sembako", unit: "kg" },
-    { id: "p17", name: "Susu Kental Manis", currentStock: 1, minStock: 5, salePrice: 12000, purchasePrice: 10000, category: "minuman", unit: "pcs" },
-    { id: "p18", name: "Shampo Sachet", currentStock: 50, minStock: 15, salePrice: 500, purchasePrice: 350, category: "lainnya", unit: "sachet" },
-    { id: "p19", name: "Tisu Paseo", currentStock: 8, minStock: 5, salePrice: 6000, purchasePrice: 4800, category: "lainnya", unit: "bungkus" },
-    { id: "p20", name: "Baterai AA", currentStock: 0, minStock: 5, salePrice: 8000, purchasePrice: 6000, category: "lainnya", unit: "pcs" },
+  const productList = [
+    { id: "p01", name: "Indomie Goreng", stock: 40, min: 10, sale: 3500, purchase: 2800, cat: "makanan", unit: "pcs" },
+    { id: "p02", name: "Indomie Kuah Ayam Bawang", stock: 5, min: 10, sale: 3500, purchase: 2800, cat: "makanan", unit: "pcs" },
+    { id: "p03", name: "Telur Ayam 1kg", stock: 8, min: 5, sale: 28000, purchase: 25000, cat: "sembako", unit: "kg" },
+    { id: "p04", name: "Beras 5kg", stock: 3, min: 2, sale: 65000, purchase: 58000, cat: "sembako", unit: "pack" },
+    { id: "p05", name: "Kopi Sachet", stock: 100, min: 20, sale: 2000, purchase: 1500, cat: "minuman", unit: "sachet" },
+    { id: "p06", name: "Teh Botol", stock: 15, min: 10, sale: 5000, purchase: 3800, cat: "minuman", unit: "botol" },
+    { id: "p07", name: "Gula Pasir 1kg", stock: 5, min: 3, sale: 16000, purchase: 14000, cat: "sembako", unit: "kg" },
+    { id: "p08", name: "Minyak Goreng 1L", stock: 4, min: 3, sale: 18000, purchase: 16000, cat: "sembako", unit: "liter" },
+    { id: "p09", name: "Air Mineral 600ml", stock: 24, min: 12, sale: 3000, purchase: 2200, cat: "minuman", unit: "botol" },
+    { id: "p10", name: "Sabun Mandi Lifebuoy", stock: 6, min: 5, sale: 4500, purchase: 3500, cat: "lainnya", unit: "pcs" },
+    { id: "p11", name: "Rokok Kretek Djisamsoe", stock: 2, min: 5, sale: 25000, purchase: 22000, cat: "rokok", unit: "bungkus" },
+    { id: "p12", name: "Rokok Filter Sampoerna", stock: 10, min: 5, sale: 30000, purchase: 27000, cat: "rokok", unit: "bungkus" },
+    { id: "p13", name: "Kecap Manis Bango", stock: 12, min: 5, sale: 8000, purchase: 6000, cat: "sembako", unit: "pcs" },
+    { id: "p14", name: "Saus Sambal ABC", stock: 0, min: 5, sale: 7000, purchase: 5500, cat: "sembako", unit: "pcs" },
+    { id: "p15", name: "Mie Sedap Goreng", stock: 35, min: 10, sale: 3500, purchase: 2800, cat: "makanan", unit: "pcs" },
+    { id: "p16", name: "Tepung Terigu 1kg", stock: 4, min: 3, sale: 12000, purchase: 10000, cat: "sembako", unit: "kg" },
+    { id: "p17", name: "Susu Kental Manis", stock: 1, min: 5, sale: 12000, purchase: 10000, cat: "minuman", unit: "pcs" },
+    { id: "p18", name: "Shampo Sachet", stock: 50, min: 15, sale: 500, purchase: 350, cat: "lainnya", unit: "sachet" },
+    { id: "p19", name: "Tisu Paseo", stock: 8, min: 5, sale: 6000, purchase: 4800, cat: "lainnya", unit: "bungkus" },
+    { id: "p20", name: "Baterai AA", stock: 0, min: 5, sale: 8000, purchase: 6000, cat: "lainnya", unit: "pcs" },
   ];
 
-  for (const p of products) {
-    db.insert(schema.products)
-      .values({
-        id: p.id,
-        name: p.name,
-        currentStock: p.currentStock,
-        minStock: p.minStock,
-        salePrice: p.salePrice,
-        purchasePrice: p.purchasePrice,
-        category: p.category as any,
-        unit: p.unit as any,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .onConflictDoNothing()
-      .run();
+  const insertProduct = sqlite.prepare(`
+    INSERT OR IGNORE INTO products (id, name, current_stock, min_stock, sale_price, purchase_price, category, unit, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+  `);
+
+  for (const p of productList) {
+    insertProduct.run(p.id, p.name, p.stock, p.min, p.sale, p.purchase, p.cat, p.unit);
   }
-  console.log("  ✓ Products seeded");
+  console.log("  ✓ Products seeded (20)");
 
   // ====== EXPENSES ======
   const expenseData = [
-    { id: "e1", productId: "p01", quantityAdded: 20, totalCost: 56000, userId: "u2", createdAt: new Date("2026-06-07T08:00:00") },
-    { id: "e2", productId: "p03", quantityAdded: 5, totalCost: 125000, userId: "u2", createdAt: new Date("2026-06-07T08:15:00") },
-    { id: "e3", productId: "p05", quantityAdded: 50, totalCost: 75000, userId: "u3", createdAt: new Date("2026-06-06T09:00:00") },
-    { id: "e4", productId: "p07", quantityAdded: 3, totalCost: 42000, userId: "u3", createdAt: new Date("2026-06-06T10:30:00") },
-    { id: "e5", productId: "p11", quantityAdded: 5, totalCost: 110000, userId: "u2", createdAt: new Date("2026-06-05T07:00:00") },
-    { id: "e6", productId: "p09", quantityAdded: 12, totalCost: 26400, userId: "u3", createdAt: new Date("2026-06-05T08:00:00") },
+    { id: "e1", pid: "p01", qty: 20, cost: 56000, uid: "u2" },
+    { id: "e2", pid: "p03", qty: 5, cost: 125000, uid: "u2" },
+    { id: "e3", pid: "p05", qty: 50, cost: 75000, uid: "u3" },
+    { id: "e4", pid: "p07", qty: 3, cost: 42000, uid: "u3" },
+    { id: "e5", pid: "p11", qty: 5, cost: 110000, uid: "u2" },
+    { id: "e6", pid: "p09", qty: 12, cost: 26400, uid: "u3" },
   ];
 
-  for (const e of expenseData) {
-    db.insert(schema.expenses).values(e).onConflictDoNothing().run();
-  }
-  console.log("  ✓ Expenses seeded");
+  const insertExpense = sqlite.prepare(`
+    INSERT OR IGNORE INTO expenses (id, product_id, quantity_added, total_cost, user_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  // Stagger the dates for variety: hours ago → epoch ms
+  const hoursAgo = [2, 2, 26, 24, 50, 48];
+  expenseData.forEach((e, i) => {
+    const ts = Date.now() - hoursAgo[i] * 60 * 60 * 1000;
+    insertExpense.run(e.id, e.pid, e.qty, e.cost, e.uid, ts);
+  });
+  console.log("  ✓ Expenses seeded (6)");
 
   console.log("✅ Seed complete!");
   sqlite.close();
